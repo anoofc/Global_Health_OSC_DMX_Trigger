@@ -1,10 +1,11 @@
 #define DEBUG     1
 
-#define SWITCH_PIN  0  // GPIO pin for the switch
-#define LED_PIN     2  // GPIO pin for the built-in LED
+#define SWITCH_PIN  13  // GPIO pin for the switch
+#define LED_PIN     32  // GPIO pin for the built-in LED
 
 #define LED_COUNT   9  // Number of LEDs in the strip
 
+#define DEBOUNCE_DELAY  500 // Debounce delay in milliseconds
 
 #include <Wire.h>
 #include <Arduino.h>
@@ -14,17 +15,19 @@
 #include <BluetoothSerial.h>
 #include <Preferences.h>
 #include "eth_properties.h"
-
+#include "SparkFunDMX.h"
 
 BluetoothSerial SerialBT; // Bluetooth Serial
 Preferences preferences;  // Preferences for storing data
 WiFiUDP Udp;
+SparkFunDMX dmx;          // DMX object
 
 IPAddress ip, subnet, gateway, outIp;
 uint16_t inPort = 7000;
 uint16_t outPort = 7001;
 
-
+uint32_t lastMillis = 0;
+bool switchState = false;
 
 const String HELP = "SET_IP x.x.x.x\nSET_SUBNET x.x.x.x\nSET_GATEWAY x.x.x.x\nSET_OUTIP x.x.x.x\nSET_INPORT xxxx\nSET_OUTPORT xxxx\nGET\nIP\nMAC\nHELP";
 
@@ -145,6 +148,25 @@ void readBTSerial(){
   }
 }
 
+void readSwitch(){
+  if (digitalRead(SWITCH_PIN) == LOW && switchState == HIGH) {
+    if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
+    switchState = LOW;
+    lastMillis = millis();
+    dmx.write(1, 255); // Set DMX channel 1 to 255
+    oscSend(1, 1); // Send OSC message for column 1
+    if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+  } else if (digitalRead(SWITCH_PIN) == HIGH && switchState == LOW) {
+    if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
+    lastMillis = millis();
+    switchState = HIGH;
+    // dmx.write(1, 0); // Set DMX channel 1 to 0
+    // oscSend(1, 0); // Send OSC message for column 1
+    if (DEBUG) { Serial.println("Switch Released - DMX 0 Sent"); }
+  }
+}
+
+
 void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
     case SYSTEM_EVENT_ETH_START:
@@ -188,6 +210,8 @@ void setup() {
 
   loadNetworkConfig();
   ethInit();
+  dmx.initWrite(5);
+  dmx.write(1, 0); // Set DMX channel 1 to 0
 
 }
 
