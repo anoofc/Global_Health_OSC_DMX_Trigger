@@ -1,7 +1,7 @@
 #define DEBUG     1
 
-#define SWITCH_PIN  13  // GPIO pin for the switch
-#define LED_PIN     32  // GPIO pin for the built-in LED
+#define SWITCH_PIN  32  // GPIO pin for the switch
+#define LED_PIN     13  // GPIO pin for the built-in LED
 
 #define LED_COUNT   9  // Number of LEDs in the strip
 
@@ -74,7 +74,7 @@ void oscSend(uint8_t column, int value) {
   snprintf(address, sizeof(address), "/composition/columns/%d/connect", column);
   OSCMessage msg(address);
   msg.add(value);
-  Udp.beginPacket(outIp, outPort);
+  Udp.beginPacket(outIp, outPort); 
   msg.send(Udp);
   Udp.endPacket();
   msg.empty();
@@ -166,6 +166,18 @@ void readSwitch(){
   }
 }
 
+// void readSwitch(){
+//   // if (digitalRead(SWITCH_PIN)==LOW && millis() - lastMillis > DEBOUNCE_DELAY){
+//   //   lastMillis = millis();
+//   //   // dmx.write(1, 255); // Set DMX channel 1 to 255
+//   //   oscSend(1, 1); // Send OSC message for column 1
+//   //   if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+//   // }
+
+//   Serial.println(digitalRead(SWITCH_PIN));
+//   delay(100);
+// }
+
 
 void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
@@ -182,7 +194,6 @@ void WiFiEvent(WiFiEvent_t event) {
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
       Serial.println("ETH Disconnected");
-      ESP.restart(); // Restart ESP32 on disconnection
       break;
     case SYSTEM_EVENT_ETH_STOP:
       Serial.println("ETH Stopped");
@@ -197,7 +208,7 @@ void ethInit() {
   ETH.config(ip, gateway, subnet);
   WiFi.onEvent(WiFiEvent);
   Udp.begin(inPort);
-  delay(5000); // Wait for the Ethernet to initialize
+  // delay(5000); // Wait for the Ethernet to initialize
   Serial.println("ETH Initialized");
   Serial.printf("ETH IP: %s\n", ETH.localIP().toString().c_str());
   Serial.printf("ETH MAC: %s\n", ETH.macAddress().c_str());
@@ -207,14 +218,16 @@ void ethInit() {
 void setup() {
   Serial.begin(115200);
   SerialBT.begin("GH_MediaPro");
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+  dmx.initWrite(5);
+  dmx.write(1, 0); // Set DMX channel 1 to 0
 
   loadNetworkConfig();
   ethInit();
-  dmx.initWrite(5);
-  dmx.write(1, 0); // Set DMX channel 1 to 0
 
 }
 
 void loop() {
+  readSwitch();
   readBTSerial();
 }

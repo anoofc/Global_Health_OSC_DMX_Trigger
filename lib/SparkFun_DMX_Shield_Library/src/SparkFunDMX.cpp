@@ -17,7 +17,7 @@ Distributed as-is; no warranty is given.
 #include <Arduino.h>
 
 #include "SparkFunDMX.h"
-#include <HardwareSerial.h>
+#include <SoftwareSerial.h>
 
 #define dmxMaxChannel  513
 #define defaultMax 32
@@ -26,15 +26,15 @@ Distributed as-is; no warranty is given.
 #define DMXFORMAT      SERIAL_8N2
 
 int enablePin = 21;		//dafault on ESP32
-int rxPin = 16;
-int txPin = 17;
+int rxPin = 33;
+int txPin = 14;
 
 //DMX value array and size. Entry 0 will hold startbyte
 uint8_t dmxData[dmxMaxChannel] = {};
 int chanSize;
 int currentChannel = 0;
 
-HardwareSerial DMXSerial(2);
+SoftwareSerial DMXSerial(rxPin, txPin);
 
 /* Interrupt Timer for DMX Receive */
 hw_timer_t * timer = NULL;
@@ -59,7 +59,7 @@ void IRAM_ATTR onTimer() {
 	{	
 		portENTER_CRITICAL_ISR(&timerMux);
 		_startCodeDetected = true;
-		DMXSerial.begin(DMXSPEED, DMXFORMAT, rxPin, txPin);
+    DMXSerial.begin(DMXSPEED);
 		portEXIT_CRITICAL_ISR(&timerMux);
 		_interruptCounter = 0;
 	}
@@ -93,7 +93,7 @@ void SparkFunDMX::initWrite (int chanQuant) {
 
   chanSize = chanQuant + 1; //Add 1 for start code
 
-  DMXSerial.begin(DMXSPEED, DMXFORMAT, rxPin, txPin);
+  DMXSerial.begin(DMXSPEED);
   pinMode(enablePin, OUTPUT);
   digitalWrite(enablePin, HIGH);
 }
@@ -117,7 +117,7 @@ void SparkFunDMX::write(int Channel, uint8_t value) {
 void SparkFunDMX::update() {
   if (_READWRITE == _WRITE)
   {
-	DMXSerial.begin(DMXSPEED, DMXFORMAT, rxPin, txPin);//Begin the Serial port
+  DMXSerial.begin(DMXSPEED);//Begin the Serial port
     pinMatrixOutDetach(txPin, false, false); //Detach our
     pinMode(txPin, OUTPUT); 
     digitalWrite(txPin, LOW); //88 uS break
