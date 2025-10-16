@@ -1,26 +1,26 @@
-#define DEBUG     1
+#define DEBUG       1
 
 #define SWITCH_PIN  32  // GPIO pin for the switch
 #define LED_PIN     13  // GPIO pin for the built-in LED
 
 #define LED_COUNT   9  // Number of LEDs in the strip
 
-#define DEBOUNCE_DELAY  500 // Debounce delay in milliseconds
+#define DEBOUNCE_DELAY  50 // Debounce delay in milliseconds
+#define FPS             30 // Frames per second for DMX updates
 
 #include <Wire.h>
 #include <Arduino.h>
 #include <OSCMessage.h>
-#include <ETH.h>
+#include <ETH.h>                                                                                                    
 #include <WiFiUdp.h>
 #include <BluetoothSerial.h>
 #include <Preferences.h>
 #include "eth_properties.h"
-#include "SparkFunDMX.h"
+
 
 BluetoothSerial SerialBT; // Bluetooth Serial
 Preferences preferences;  // Preferences for storing data
 WiFiUDP Udp;
-SparkFunDMX dmx;          // DMX object
 
 IPAddress ip, subnet, gateway, outIp;
 uint16_t inPort = 7000;
@@ -153,30 +153,17 @@ void readSwitch(){
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     switchState = LOW;
     lastMillis = millis();
-    dmx.write(1, 255); // Set DMX channel 1 to 255
+    // TODO: TRIGGER SLAVE
     oscSend(1, 1); // Send OSC message for column 1
-    if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+    // if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
   } else if (digitalRead(SWITCH_PIN) == HIGH && switchState == LOW) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     lastMillis = millis();
     switchState = HIGH;
-    // dmx.write(1, 0); // Set DMX channel 1 to 0
-    // oscSend(1, 0); // Send OSC message for column 1
-    if (DEBUG) { Serial.println("Switch Released - DMX 0 Sent"); }
+    // TODO: RESET SLAVE
+    // if (DEBUG) { Serial.println("Switch Released - DMX 0 Sent"); }
   }
 }
-
-// void readSwitch(){
-//   // if (digitalRead(SWITCH_PIN)==LOW && millis() - lastMillis > DEBOUNCE_DELAY){
-//   //   lastMillis = millis();
-//   //   // dmx.write(1, 255); // Set DMX channel 1 to 255
-//   //   oscSend(1, 1); // Send OSC message for column 1
-//   //   if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
-//   // }
-
-//   Serial.println(digitalRead(SWITCH_PIN));
-//   delay(100);
-// }
 
 
 void WiFiEvent(WiFiEvent_t event) {
@@ -219,8 +206,6 @@ void setup() {
   Serial.begin(115200);
   SerialBT.begin("GH_MediaPro");
   pinMode(SWITCH_PIN, INPUT_PULLUP);
-  dmx.initWrite(5);
-  dmx.write(1, 0); // Set DMX channel 1 to 0
 
   loadNetworkConfig();
   ethInit();
