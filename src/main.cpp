@@ -16,11 +16,13 @@
 #include <BluetoothSerial.h>
 #include <Preferences.h>
 #include "eth_properties.h"
+#include <Adafruit_NeoPixel.h>
 
 
 BluetoothSerial SerialBT; // Bluetooth Serial
 Preferences preferences;  // Preferences for storing data
 WiFiUDP Udp;
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 IPAddress ip, subnet, gateway, outIp;
 uint16_t inPort = 7000;
@@ -30,6 +32,10 @@ uint32_t timeout = 0;
 
 uint32_t lastMillis = 0;
 uint32_t showTimer = 0;
+
+uint8_t trigledColor[3] = {0, 0, 0};
+uint8_t idleledColor[3] = {0, 0, 0};
+
 bool switchState = false;
 bool showRunning = false;
 
@@ -57,9 +63,15 @@ void saveNetworkConfig() {
   saveIPAddress("sub", subnet);
   saveIPAddress("gw", gateway);
   saveIPAddress("out", outIp);
-  preferences.putUInt("inPort", inPort); // Save input port
+  preferences.putUInt("inPort",  inPort); // Save input port
   preferences.putUInt("outPort", outPort); // Save output port
   preferences.putUInt("timeout", timeout); // Save timeout
+  preferences.putUInt("trigledColorR", trigledColor[0]);
+  preferences.putUInt("trigledColorG", trigledColor[1]);
+  preferences.putUInt("trigledColorB", trigledColor[2]);
+  preferences.putUInt("idleledColorR", idleledColor[0]);
+  preferences.putUInt("idleledColorG", idleledColor[1]);
+  preferences.putUInt("idleledColorB", idleledColor[2]);
   preferences.end();
 }
 
@@ -72,6 +84,13 @@ void loadNetworkConfig() {
   inPort  = preferences.getUInt("inPort", 7001); // Load input port
   outPort = preferences.getUInt("outPort", 7000); // Load output port
   timeout = preferences.getUInt("timeout", 5000); // Load timeout
+
+  trigledColor[0] = preferences.getUInt("trigledColorR", 255);
+  trigledColor[1] = preferences.getUInt("trigledColorG", 0);
+  trigledColor[2] = preferences.getUInt("trigledColorB", 0);
+  idleledColor[0] = preferences.getUInt("idleledColorR", 0);
+  idleledColor[1] = preferences.getUInt("idleledColorG", 255);
+  idleledColor[2] = preferences.getUInt("idleledColorB", 0);
   preferences.end();
 }
 
@@ -141,6 +160,28 @@ void processData(String data) {
     saveNetworkConfig();
     SerialBT.printf("✅ Timeout set to %d ms and saved.\n", timeout);
   }
+  else if (data.startsWith("SET_TRIG_LED ")) {
+    String value = data.substring(13);
+    int r, g, b;
+    if (sscanf(value.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+      trigledColor[0] = r; trigledColor[1] = g; trigledColor[2] = b;
+      SerialBT.printf("✅ LED Color set to R:%d G:%d B:%d.\n", r, g, b);
+      saveNetworkConfig();
+    } else {
+      SerialBT.println("❌ Invalid LED Color format. Use R,G,B.");
+    }
+  }
+  else if (data.startsWith("SET_IDLE_LED ")) {
+    String value = data.substring(13);
+    int r, g, b;
+    if (sscanf(value.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+      idleledColor[0] = r; idleledColor[1] = g; idleledColor[2] = b;
+      SerialBT.printf("✅ Idle LED Color set to R:%d G:%d B:%d.\n", r, g, b);
+      saveNetworkConfig();
+    } else {
+      SerialBT.println("❌ Invalid Idle LED Color format. Use R,G,B.");
+    }
+  }
   else if (data == "IP") { SerialBT.printf("ETH IP: %s\n", ETH.localIP().toString().c_str());}
   else if (data == "MAC") { SerialBT.printf("ETH MAC: %s\n", ETH.macAddress().c_str());}
   
@@ -162,10 +203,18 @@ void readBTSerial(){
   }
 }
 
+void setLEDColor(uint32_t r, uint32_t g, uint32_t b) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(r, g, b));
+  }
+  strip.show();
+}
+
 void checkShowTimeout(){
   if (showRunning && (millis() - showTimer >= timeout)){ 
   digitalWrite(ESP_OUT, HIGH);
   showRunning = false;
+  setLEDColor(idleledColor[0], idleledColor[1], idleledColor[2]);
   if (DEBUG) { Serial.println("Show Timeout - DMX 0 Sent"); }
   }
 }
@@ -173,13 +222,16 @@ void checkShowTimeout(){
 void readSwitch(){
   if (digitalRead(SWITCH_PIN) == LOW && switchState == HIGH) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
-    switchState = LOW;
-    lastMillis = millis();
-    digitalWrite(ESP_OUT, LOW);
-    oscSend(1, 1); // Send OSC message for column 1
-    showTimer = millis();
-    showRunning = true;
-    if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+    if (!showRunning) {
+      switchState = LOW;
+      lastMillis = millis();
+      digitalWrite(ESP_OUT, LOW);
+      oscSend(1, 1); // Send OSC message for column 1
+      setLEDColor(trigledColor[0], trigledColor[1], trigledColor[2]);
+      showTimer = millis();
+      showRunning = true;
+      if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+    }
   } else if (digitalRead(SWITCH_PIN) == HIGH && switchState == LOW) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     lastMillis = millis();
@@ -236,6 +288,10 @@ void setup() {
   loadNetworkConfig();
   ethInit();
 
+  strip.begin();
+  strip.setBrightness(255);
+  strip.show(); // Initialize all pixels to 'off'
+  setLEDColor(idleledColor[0], idleledColor[1], idleledColor[2]);
 }
 
 void loop() {
