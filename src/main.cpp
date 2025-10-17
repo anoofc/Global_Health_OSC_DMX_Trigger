@@ -2,7 +2,7 @@
 
 #define SWITCH_PIN  32  // GPIO pin for the switch
 #define LED_PIN     13  // GPIO pin for the built-in LED
-#define ESP_OUT     33  // GPIO pin for the ESP output
+#define ESP_OUT     14  // GPIO pin for the ESP output
 
 #define LED_COUNT   9  // Number of LEDs in the strip
 
