@@ -2,13 +2,13 @@
 
 #define SWITCH_PIN  32  // GPIO pin for the switch
 #define LED_PIN     13  // GPIO pin for the built-in LED
+#define ESP_OUT     33  // GPIO pin for the ESP output
 
 #define LED_COUNT   9  // Number of LEDs in the strip
 
 #define DEBOUNCE_DELAY  50 // Debounce delay in milliseconds
 #define FPS             30 // Frames per second for DMX updates
 
-#include <Wire.h>
 #include <Arduino.h>
 #include <OSCMessage.h>
 #include <ETH.h>                                                                                                    
@@ -153,14 +153,14 @@ void readSwitch(){
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     switchState = LOW;
     lastMillis = millis();
-    // TODO: TRIGGER SLAVE
+    digitalWrite(ESP_OUT, LOW);
     oscSend(1, 1); // Send OSC message for column 1
     // if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
   } else if (digitalRead(SWITCH_PIN) == HIGH && switchState == LOW) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     lastMillis = millis();
     switchState = HIGH;
-    // TODO: RESET SLAVE
+    digitalWrite(ESP_OUT, HIGH);
     // if (DEBUG) { Serial.println("Switch Released - DMX 0 Sent"); }
   }
 }
@@ -206,6 +206,8 @@ void setup() {
   Serial.begin(115200);
   SerialBT.begin("GH_MediaPro");
   pinMode(SWITCH_PIN, INPUT_PULLUP);
+  pinMode(ESP_OUT, OUTPUT);
+  digitalWrite(ESP_OUT, HIGH);
 
   loadNetworkConfig();
   ethInit();
