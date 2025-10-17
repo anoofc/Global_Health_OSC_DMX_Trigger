@@ -26,10 +26,14 @@ IPAddress ip, subnet, gateway, outIp;
 uint16_t inPort = 7000;
 uint16_t outPort = 7001;
 
-uint32_t lastMillis = 0;
-bool switchState = false;
+uint32_t timeout = 0;
 
-const String HELP = "SET_IP x.x.x.x\nSET_SUBNET x.x.x.x\nSET_GATEWAY x.x.x.x\nSET_OUTIP x.x.x.x\nSET_INPORT xxxx\nSET_OUTPORT xxxx\nGET\nIP\nMAC\nHELP";
+uint32_t lastMillis = 0;
+uint32_t showTimer = 0;
+bool switchState = false;
+bool showRunning = false;
+
+const String HELP = "SET_IP x.x.x.x\nSET_SUBNET x.x.x.x\nSET_GATEWAY x.x.x.x\nSET_OUTIP x.x.x.x\nSET_INPORT xxxx\nSET_OUTPORT xxxx\nSET_TIMEOUT xxxx\nGET\nIP\nMAC\nHELP";
 
 void saveIPAddress(const char* keyPrefix, IPAddress address) {
   for (int i = 0; i < 4; i++) {
@@ -55,6 +59,7 @@ void saveNetworkConfig() {
   saveIPAddress("out", outIp);
   preferences.putUInt("inPort", inPort); // Save input port
   preferences.putUInt("outPort", outPort); // Save output port
+  preferences.putUInt("timeout", timeout); // Save timeout
   preferences.end();
 }
 
@@ -66,6 +71,7 @@ void loadNetworkConfig() {
   outIp   = loadIPAddress("out", IPAddress(10, 255, 250, 129));
   inPort  = preferences.getUInt("inPort", 7001); // Load input port
   outPort = preferences.getUInt("outPort", 7000); // Load output port
+  timeout = preferences.getUInt("timeout", 5000); // Load timeout
   preferences.end();
 }
 
@@ -99,6 +105,8 @@ void getConfig(){
   SerialBT.printf("OutIP: %s\n", outIp.toString().c_str());
   SerialBT.printf("Input port: %d\n", inPort);
   SerialBT.printf("Output port: %d\n", outPort);
+  SerialBT.printf("Timeout: %d ms\n", timeout);
+  preferences.end();
 
 }
 
@@ -127,6 +135,12 @@ void processData(String data) {
     if (port > 0 && port < 65536) { outPort = static_cast<uint16_t>(port); saveNetworkConfig(); SerialBT.printf("✅ Output port set to %d and saved.\n", outPort); } 
     else { SerialBT.println("❌ Invalid port. Must be between 1 and 65535."); }
   }
+  else if (data.startsWith("SET_TIMEOUT ")) {
+    uint32_t t = data.substring(12).toInt();
+    timeout = t; 
+    saveNetworkConfig();
+    SerialBT.printf("✅ Timeout set to %d ms and saved.\n", timeout);
+  }
   else if (data == "IP") { SerialBT.printf("ETH IP: %s\n", ETH.localIP().toString().c_str());}
   else if (data == "MAC") { SerialBT.printf("ETH MAC: %s\n", ETH.macAddress().c_str());}
   
@@ -148,6 +162,14 @@ void readBTSerial(){
   }
 }
 
+void checkShowTimeout(){
+  if (showRunning && (millis() - showTimer >= timeout)){ 
+  digitalWrite(ESP_OUT, HIGH);
+  showRunning = false;
+  if (DEBUG) { Serial.println("Show Timeout - DMX 0 Sent"); }
+  }
+}
+
 void readSwitch(){
   if (digitalRead(SWITCH_PIN) == LOW && switchState == HIGH) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
@@ -155,12 +177,14 @@ void readSwitch(){
     lastMillis = millis();
     digitalWrite(ESP_OUT, LOW);
     oscSend(1, 1); // Send OSC message for column 1
-    // if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
+    showTimer = millis();
+    showRunning = true;
+    if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
   } else if (digitalRead(SWITCH_PIN) == HIGH && switchState == LOW) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     lastMillis = millis();
     switchState = HIGH;
-    digitalWrite(ESP_OUT, HIGH);
+    // digitalWrite(ESP_OUT, HIGH);
     // if (DEBUG) { Serial.println("Switch Released - DMX 0 Sent"); }
   }
 }
@@ -204,7 +228,7 @@ void ethInit() {
 
 void setup() {
   Serial.begin(115200);
-  SerialBT.begin("GH_MediaPro");
+  SerialBT.begin("GH_mediaPro");
   pinMode(SWITCH_PIN, INPUT_PULLUP);
   pinMode(ESP_OUT, OUTPUT);
   digitalWrite(ESP_OUT, HIGH);
@@ -217,4 +241,5 @@ void setup() {
 void loop() {
   readSwitch();
   readBTSerial();
+  checkShowTimeout();
 }
