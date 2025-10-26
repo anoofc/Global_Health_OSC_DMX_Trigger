@@ -24,9 +24,10 @@ Preferences preferences;  // Preferences for storing data
 WiFiUDP Udp;
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-IPAddress ip, subnet, gateway, outIp;
+IPAddress ip, subnet, gateway, outIp, MAIp;
 uint16_t inPort = 7000;
 uint16_t outPort = 7001;
+uint16_t maOutPort = 8000;
 
 uint32_t timeout = 0;
 
@@ -39,7 +40,7 @@ uint8_t idleledColor[3] = {0, 0, 0};
 bool switchState = false;
 bool showRunning = false;
 
-const String HELP = "SET_IP x.x.x.x\nSET_SUBNET x.x.x.x\nSET_GATEWAY x.x.x.x\nSET_OUTIP x.x.x.x\nSET_INPORT xxxx\nSET_OUTPORT xxxx\nSET_TIMEOUT xxxx\nGET\nIP\nMAC\nHELP";
+const String HELP = "SET_IP x.x.x.x\nSET_SUBNET x.x.x.x\nSET_GATEWAY x.x.x.x\nSET_OUTIP x.x.x.x\nSET_INPORT xxxx\nSET_OUTPORT xxxx\nSET_TIMEOUT xxxx\nSET_MAIP x.x.x.x\nSET_MAOUTPORT xxxx\n SET_TRIG_LED xxx,xx,xx \n SET_IDLE_LED xxx,xx,xx\nGET\nIP\nMAC\nHELP";
 
 void saveIPAddress(const char* keyPrefix, IPAddress address) {
   for (int i = 0; i < 4; i++) {
@@ -63,34 +64,37 @@ void saveNetworkConfig() {
   saveIPAddress("sub", subnet);
   saveIPAddress("gw", gateway);
   saveIPAddress("out", outIp);
+  saveIPAddress("ma", MAIp);
   preferences.putUInt("inPort",  inPort); // Save input port
   preferences.putUInt("outPort", outPort); // Save output port
+  preferences.putInt("maOutPort", maOutPort); // Save maOutPort
   preferences.putUInt("timeout", timeout); // Save timeout
-  preferences.putUInt("trigledColorR", trigledColor[0]);
-  preferences.putUInt("trigledColorG", trigledColor[1]);
-  preferences.putUInt("trigledColorB", trigledColor[2]);
-  preferences.putUInt("idleledColorR", idleledColor[0]);
-  preferences.putUInt("idleledColorG", idleledColor[1]);
-  preferences.putUInt("idleledColorB", idleledColor[2]);
+  preferences.putUInt("trigR", trigledColor[0]);
+  preferences.putUInt("trigG", trigledColor[1]);
+  preferences.putUInt("trigB", trigledColor[2]);
+  preferences.putUInt("idleR", idleledColor[0]);
+  preferences.putUInt("idleG", idleledColor[1]);
+  preferences.putUInt("idleB", idleledColor[2]);
   preferences.end();
 }
 
 void loadNetworkConfig() {
   preferences.begin("NET_CONFIG", true);
-  ip      = loadIPAddress("ip",  IPAddress(10, 255, 250, 150));
-  subnet  = loadIPAddress("sub", IPAddress(255, 255, 254, 0));
-  gateway = loadIPAddress("gw",  IPAddress(10, 255, 250, 1));
-  outIp   = loadIPAddress("out", IPAddress(10, 255, 250, 129));
+  ip      = loadIPAddress("ip",  IPAddress(192, 168, 1, 99));
+  subnet  = loadIPAddress("sub", IPAddress(255, 0, 0, 0));
+  gateway = loadIPAddress("gw",  IPAddress(192, 168, 0, 1));
+  outIp   = loadIPAddress("out", IPAddress(192, 168, 1, 101));
+  MAIp    = loadIPAddress("ma",  IPAddress(192, 168, 1, 100));
   inPort  = preferences.getUInt("inPort", 7001); // Load input port
   outPort = preferences.getUInt("outPort", 7000); // Load output port
   timeout = preferences.getUInt("timeout", 5000); // Load timeout
-
-  trigledColor[0] = preferences.getUInt("trigledColorR", 255);
-  trigledColor[1] = preferences.getUInt("trigledColorG", 0);
-  trigledColor[2] = preferences.getUInt("trigledColorB", 0);
-  idleledColor[0] = preferences.getUInt("idleledColorR", 0);
-  idleledColor[1] = preferences.getUInt("idleledColorG", 255);
-  idleledColor[2] = preferences.getUInt("idleledColorB", 0);
+  maOutPort = preferences.getInt("maOutPort", 8000);
+  trigledColor[0] = preferences.getUInt("trigR", 255);
+  trigledColor[1] = preferences.getUInt("trigG", 0);
+  trigledColor[2] = preferences.getUInt("trigB", 0);
+  idleledColor[0] = preferences.getUInt("idleR", 0);
+  idleledColor[1] = preferences.getUInt("idleG", 255);
+  idleledColor[2] = preferences.getUInt("idleB", 0);
   preferences.end();
 }
 
@@ -104,6 +108,18 @@ void oscSend(uint8_t column, int value) {
   Udp.endPacket();
   msg.empty();
 }
+
+void MAoscSend(int fader,int message) {
+  char address[100];
+  snprintf(address, sizeof(address), "/gma3/Page1/Fader%d", fader);
+  OSCMessage msg(address);
+  msg.add(message);
+  Udp.beginPacket(MAIp, maOutPort); 
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
 
 // void timeCodeOSCSend(uint8_t mode){
 //   char address[20];
@@ -122,9 +138,20 @@ void getConfig(){
   SerialBT.printf("Subnet: %s\n", subnet.toString().c_str());
   SerialBT.printf("Gateway: %s\n", gateway.toString().c_str());
   SerialBT.printf("OutIP: %s\n", outIp.toString().c_str());
+  SerialBT.printf("MA IP: %s\n", MAIp.toString().c_str());
   SerialBT.printf("Input port: %d\n", inPort);
   SerialBT.printf("Output port: %d\n", outPort);
+  SerialBT.printf("MA Output port: %d\n", maOutPort);
   SerialBT.printf("Timeout: %d ms\n", timeout);
+  trigledColor[0] = preferences.getUInt("trigR", 255);
+  trigledColor[1] = preferences.getUInt("trigG", 0);
+  trigledColor[2] = preferences.getUInt("trigB", 0);
+  idleledColor[0] = preferences.getUInt("idleR", 0);
+  idleledColor[1] = preferences.getUInt("idleG", 255);
+  idleledColor[2] = preferences.getUInt("idleB", 0);
+
+  SerialBT.printf("Trigger LED Color: R:%d G:%d B:%d\n", trigledColor[0], trigledColor[1], trigledColor[2]);
+  SerialBT.printf("Idle LED Color: R:%d G:%d B:%d\n", idleledColor[0], idleledColor[1], idleledColor[2]);
   preferences.end();
 
 }
@@ -144,6 +171,7 @@ void processData(String data) {
   else if (data.startsWith("SET_SUBNET ")) { updateIP("Subnet", subnet, 11); } 
   else if (data.startsWith("SET_GATEWAY ")) { updateIP("Gateway", gateway, 12);  } 
   else if (data.startsWith("SET_OUTIP ")) { updateIP("OutIP", outIp, 10); } 
+  else if (data.startsWith("SET_MAIP ")) { updateIP("MA IP", MAIp, 9); }
   else if (data.startsWith ("SET_INPORT ")) {
     int port = data.substring(10).toInt();
     if (port > 0 && port < 65536) { inPort = static_cast<uint16_t>(port); saveNetworkConfig(); SerialBT.printf("✅ Input port set to %d and saved.\n", inPort); } 
@@ -152,6 +180,11 @@ void processData(String data) {
   else if (data.startsWith("SET_OUTPORT ")) {
     int port = data.substring(12).toInt();
     if (port > 0 && port < 65536) { outPort = static_cast<uint16_t>(port); saveNetworkConfig(); SerialBT.printf("✅ Output port set to %d and saved.\n", outPort); } 
+    else { SerialBT.println("❌ Invalid port. Must be between 1 and 65535."); }
+  }
+  else if (data.startsWith("SET_MAPORT ")) {
+    int port = data.substring(11).toInt();
+    if (port > 0 && port < 65536) { maOutPort = static_cast<uint16_t>(port); saveNetworkConfig(); SerialBT.printf("✅ MA Output port set to %d and saved.\n", maOutPort); } 
     else { SerialBT.println("❌ Invalid port. Must be between 1 and 65535."); }
   }
   else if (data.startsWith("SET_TIMEOUT ")) {
@@ -203,18 +236,22 @@ void readBTSerial(){
   }
 }
 
-void setLEDColor(uint32_t r, uint32_t g, uint32_t b) {
+void setLEDColor(uint8_t r, uint8_t g, uint8_t b) {
+  strip.clear();
   for (int i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, strip.Color(r, g, b));
   }
   strip.show();
+  if (DEBUG) { Serial.printf("LED Color Set to R:%d G:%d B:%d\n", r, g, b);  }
 }
 
 void checkShowTimeout(){
   if (showRunning && (millis() - showTimer >= timeout)){ 
-  digitalWrite(ESP_OUT, HIGH);
-  showRunning = false;
   setLEDColor(idleledColor[0], idleledColor[1], idleledColor[2]);
+  digitalWrite(ESP_OUT, HIGH);
+  MAoscSend(216, 0); // Send OSC message to MA
+  MAoscSend(230, 100); // Send OSC message to MA
+  showRunning = false;
   if (DEBUG) { Serial.println("Show Timeout - DMX 0 Sent"); }
   }
 }
@@ -223,11 +260,13 @@ void readSwitch(){
   if (digitalRead(SWITCH_PIN) == LOW && switchState == HIGH) {
     if (millis() - lastMillis < DEBOUNCE_DELAY) return; // Debounce check
     if (!showRunning) {
+      setLEDColor(trigledColor[0], trigledColor[1], trigledColor[2]);
       switchState = LOW;
       lastMillis = millis();
       digitalWrite(ESP_OUT, LOW);
-      oscSend(1, 1); // Send OSC message for column 1
-      setLEDColor(trigledColor[0], trigledColor[1], trigledColor[2]);
+      oscSend(3, 1); // Send OSC message for column 1
+      MAoscSend(230, 0); // Send OSC message to MA
+      MAoscSend(216, 100); // Send OSC message to MA
       showTimer = millis();
       showRunning = true;
       if (DEBUG) { Serial.println("Switch Pressed - DMX 255 Sent"); }
@@ -288,8 +327,12 @@ void setup() {
   loadNetworkConfig();
   ethInit();
 
+  MAoscSend(216, 0); // Initialize MA Fader 216 to 0
+  MAoscSend(230, 100); // Initialize MA Fader 230 to 0
+
   strip.begin();
   strip.setBrightness(255);
+  strip.clear();
   strip.show(); // Initialize all pixels to 'off'
   setLEDColor(idleledColor[0], idleledColor[1], idleledColor[2]);
 }
